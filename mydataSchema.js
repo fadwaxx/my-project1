@@ -1,24 +1,16 @@
-const mongoose=require("mongoose");
-const Schema =mongoose.Schema;
+const mongoose=require('mongoose');
+const Schema=mongoose.Schema;
 
-//الاسكيما البيانات الي ابي اخزنا شكلها كيف
-const articleSchema =new Schema({
-    Firstname:String,
-    lastname:String,
-    email:String,
-    phonenumper:String,
-    age:String,
-    cuntry:String,
-    gender:String,
-} , {timestamps: true});
+const Schemar=new Schema({
+    fullName:String,
+    username:String,
+email:{type:String, unique:true, required:true},
+password:{type:String, required:true},
+phone:String,
+city:String,
+userType:String,
+});
 
+const Mydata=mongoose.model("Mydatar",Schemar);
 
-//انشء شكل للبيانات حقتي
-const Mfad =mongoose.model("Mfadaa",articleSchema);
-
-//تصدير هذا الملف للapp.js
-module.exports =Mfad
-
-
-
-
+module.exports=Mydata;

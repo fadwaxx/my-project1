@@ -1,136 +1,131 @@
 const express = require('express');
+const path = require('path');
 const app = express();
+app.set('view engine', 'ejs');
 const port = 3000;
 const mongoose = require('mongoose');
+const session = require('express-session');
+app.use(session({
+  secret: "secret-key",
+  resave: false,
+  saveUninitialized: true
+})); 
+
 app.use(express.urlencoded({extended:true}));
-const Mfad=require("./models/mydataSchema");
-app.set('view engine', 'ejs');
+const Mydata=require("./models/mydataSchema");
+
 app.use(express.static('public'));//استدعي ملف css
+//////////
+app.use(express.static(path.join(__dirname,'kola')));
+
+/////////
 var moment =require('moment');
 var methodOverride=require('method-override');
 app.use(methodOverride('_method'));
 
 
-//خاصه auto refresh
-const path = require("path");
-const livereload = require("livereload");
-const liveReloadServer = livereload.createServer();
-liveReloadServer.watch(path.join(__dirname, 'public'));
- 
- 
-const connectLivereload = require("connect-livereload");
-app.use(connectLivereload());
- 
-liveReloadServer.server.once("connection", () => {
-  setTimeout(() => {
-    liveReloadServer.refresh("/");
-  }, 100);
-});
-//------عرض الصفحات html فقط--------//
 
-app.get('/', (req, res) => {
-  //----Mfad قاعده البيانات اسمه-----//
-  Mfad.find().then((result) =>{
+app.get('/index', async (req, res) => {
+    const users = await Mydata.find();
 
- res.render("index",{ fadarr: result, moment: moment }); 
-  }).catch((err) =>{
-    console.log(err);
-  });
-
-});
-
-
-
-
-app.get('/user/add.html', (req, res) => {
-  res.render("user/add",{ }); 
-
-});
-
-app.get('/edit/:id', (req, res) => {
-  Mfad.findById(req.params.id)
-  .then((result) =>{
-res.render("user/edit",{ obj :result,  moment: moment});
-  })
-  .catch((err) =>{
-    console.log(err);
+  
+    res.render("index", { error: null });
   });
   
-});
-//------يخزن البيانات بقاعده البيانات--------//
-app.post('/user/add.html', (req, res) => {
- 
- 
-  Mfad.create(req.body)
- .then(() => {
-res.redirect('/')
- })
- .catch((err) =>{
-  console.log(err);
- });
-});
-
-//--البحث--//
-app.post('/search', (req, res) => {
-  console.log("*********************");
-  const searchText=req.body.searchText.trim()
-
-  Mfad.find(   { $or: [{ Firstname : searchText },{lastname: searchText}] }    )
-  .then((result) => {
-    console.log(result);
-    res.render("user/search",{ arr:result,  moment: moment});
-  }).catch((err) =>{
-   console.log(err);
-  });
- });
-
-
-
-
-app.get('/view/:id', (req, res) => {
+  app.post('/index', async (req, res) => {
+    try {
+      const { fullName,username,phone,userType,city, email, password } = req.body;
   
-  Mfad.findById(req.params.id)
-  .then((result) =>{
-res.render("user/view",{ obj:result,  moment: moment});
-  })
-  .catch((err) =>{
-    console.log(err);
+      // هل المستخدم موجود؟
+      const exists = await Mydata.findOne({ email });
+  
+      if (exists) {
+        return res.render("index", { error: "هذا الإيميل مسجّل مسبقاً" });
+      }
+  
+      const newUser= new Mydata({fullName,username,phone,userType,city, email, password});
+  
+  await newUser.save();
+  console.log("تم القبض",newUser  );
+  
+  
+      req.session.user = newUser.username; 
+      // ✅ إعادة التوجيه إلى صفحة الموقع
+      res.redirect('/abarpr.html');
+    } catch (err) {
+      console.log("خطا عند الحفط",err);
+      res.render("index", { error: "حدث خطأ أثناء إنشاء الحساب" });
+    }
   });
   
-});
-
-
-app.delete("/edit/:id", (req,res) => {
-Mfad.findByIdAndDelete(req.params.id)
-.then(() =>{
-res.redirect("/");
-    })
-    .catch((err) =>{
-      console.log(err);
+  app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+  
+    const user = await Mydata.findOne({ email: username, password: password });
+  
+    if (!user) {
+      return res.render('index', { error: "خطأ في اسم المستخدم أو كلمة المرور" });
+    }
+  
+    req.session.user = user.username;
+    res.redirect("/abarpr.html");
+  }); 
+  
+  function requireLogin(req, res, next) {
+    if (!req.session.user) {
+      return res.redirect("/index");
+    }
+    next();
+  }
+  
+  ////////////
+  
+  app.get('/login', (req, res) => {
+    res.render('login',{error:"خطا"});
+  });
+  
+  
+  
+  app.get('/logout', (req, res) => {
+    req.session.destroy(() => {
+      res.redirect("/index",{error:null});
     });
-});
-
-//////////////حقل التعديل
-app.put("/edit/:id", (req,res) => {
- 
-
-  Mfad.findByIdAndUpdate(req.params.id , req.body)
-  .then(()=>{
-    res.redirect("/");
-  }).catch((err) =>{
-    console.log(err);
   });
+////////////////////////////////////////////////////////  
+
+
+app.get('/',requireLogin, (req, res) => {
+   
+    res.redirect("/abarpr.html");
 });
 
 
+////////////////////////
+// مسار جديد لعرض بيانات جميع المستخدمين في الترمينال
+app.get('/admin/users', async (req, res) => {
+    try {
+        const users = await Mydata.find();
+        
+        // طباعة البيانات في الترمينال
+        console.log("=========================================");
+        console.log("✅ البيانات المخزنة حالياً في قاعدة البيانات:");
+        console.log(users); 
+        console.log("=========================================");
 
-mongoose.connect('mongodb+srv://fadwax0212:XCOLrNSiFci8Vtzl@cluster0.87dcl9s.mongodb.net/all-data?retryWrites=true&w=majority&appName=Cluster0')
-.then(() => {
-  app.listen(port, () => {
-  console.log(`http://localhost:${port}/`);
+        // يمكنك إرسال رد بسيط للمتصفح حتى لا تتوقف الصفحة
+        res.send("Users data displayed in the terminal. Check your console.");
+        
+    } catch (error) {
+        console.error("❌ خطأ أثناء جلب البيانات:", error);
+        res.status(500).send("Error fetching data.");
+    }
+});
+///////////////////////
+mongoose.connect('mongodb+srv://KHAWLAH_db_user:dBA1IWxz1hGU5ahv@cluster0.0rettt3.mongodb.net/all-data?appName=Cluster0')
+.then(()=>{
+    app.listen(4000,()=>{
+    console.log('http://localhost:4000');
 });
 })
-.catch((err) => {console.log(err);
-});
-
+.catch((err)=>{console.log(err)});
 
